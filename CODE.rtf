@@ -1,0 +1,409 @@
+{\rtf1\ansi\ansicpg936\cocoartf2761
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 #Specific and shared ASV\
+library(ggplot2)\
+df <- read.delim(file.choose(), check.names =F,header=T,row.names = 1)\
+df <- as.data.frame(df)\
+p <- ggplot(df,aes(treatment,Bulk_soil,fill=treatment))+\
+  geom_jitter(width =0.2,shape = 21,size=5,alpha=0.5,stroke=0.1)+\
+  scale_fill_brewer(palette = "Set1")+\
+  stat_boxplot(geom = "errorbar",width=0.1,size=0.2)+theme_bw()+\
+  geom_boxplot(width=0.8,notch =F,outlier.fill=NA,outlier.color=NA,size=0.2)+\
+  ylim(0,400)+\
+  theme(panel.grid=element_blank())+\
+  theme(legend.text = element_text(colour = "black",size =12))+\
+  theme(legend.position = "right")+\
+  theme(axis.text.x.top = element_blank())+\
+  theme(axis.ticks.y.right=element_blank())+\
+  theme(axis.text.y.right = element_blank())+\
+  theme(axis.ticks.x.top=element_blank())+\
+  theme(axis.title = element_text(size =14,colour = "black"))+\
+  theme(axis.text = element_text(size = 12,colour = "black"))+\
+  theme(axis.ticks = element_line(colour = "black"))+\
+  theme(axis.line = element_line(colour="black",size=0.4))+\
+  theme(axis.line.x.top = element_line(color = "black",size=0.4))+\
+  theme(axis.line.y.right=element_line(color = "black",size=0.4))+\
+  guides(x.sec="axis",y.sec = "axis")+\
+  theme(legend.position = "none")\
+p\
+\
+#Relationships of fungal community composition with soil properties\
+library(linkET)\
+library(ggplot2)\
+library(dplyr)\
+env <- read.delim('Soil_properties.txt', row.names = 1)\
+microbe <- read.delim('Bulk_Rhizosphere_ASV.txt',  row.names = 1)\
+mantel <- mantel_test(spec = microbe, \
+                      spec_select = list(Bulk_soil = 1:6350,\
+                                         Rhizosphere_soil = 6351:12700),\
+                      env = env, mantel_fun = 'mantel')\
+mantel <- mutate(mantel, \
+                 rd = cut(r, breaks = c(-Inf, 0.1, 0.2, Inf), labels = c('< 0.1', '0.1 - 0.2', '>= 0.2')),\
+                 pd = cut(p, breaks = c(-Inf, 0.01, 0.05, Inf), labels = c('< 0.01', '0.01 - 0.05', '>= 0.05'))\
+)\
+mantel\
+qcorrplot(correlate(env,method = 'spearman'), type = "upper", diag = FALSE) +\
+  geom_square() +\
+  geom_mark(sep = '\\n', size = 2.5, sig.thres = 0.05) +\
+  geom_couple(aes(colour = pd, size = rd), data = mantel) +\
+  scale_fill_gradientn(colors = c('coral', 'white', 'dodgerblue4'), limits = c(-1, 1)) +  \
+  scale_size_manual(values = c(0.5, 1, 2)) +\
+  scale_colour_manual(values = c("#D95F02", "#1B9E77", "#A2A2A288")) +\
+  guides(size = guide_legend(title = "Mantel's r",\
+                             override.aes = list(colour = "grey35"), \
+                             order = 2),\
+         colour = guide_legend(title = "Mantel's p", \
+                               override.aes = list(size = 3), \
+                               order = 1),\
+         fill = guide_colorbar(title = "Spearman's r", order = 3))\
+\
+#Beta diversity\
+library(vegan)\
+otu <- read.delim('ASV.txt', row.names = 1, sep = '\\t', stringsAsFactors = FALSE, check.names = FALSE)\
+otu <- data.frame(t(otu))\
+bray_dis <- vegdist(otu, method = 'bray', na.rm = TRUE)\
+write.table(as.matrix(bray_dis), 'Bray_distance.txt', sep = '\\t', col.names = NA, quote = FALSE)\
+library(tidyverse)\
+sub_design <- read.table("Group.txt", header=T, row.names=1, sep="\\t")\
+beta = read.table("Bray_distance.txt",header=T, row.names=1, sep="\\t", comment.char="")\
+sub_design <- sub_design[rownames(sub_design) %in% rownames(beta),]\
+pcoa <- cmdscale(read.table("Bray_distance.txt", header = TRUE, row.names = 1,sep = "\\t",\
+                            comment.char = "#")[rownames(sub_design),rownames(sub_design)], k = 3, eig = TRUE)\
+points <- as.data.frame(pcoa$points) %>%rename(x = V1, y = V2, z = V3) %>%\
+  rownames_to_column(var="row.names") %>% \
+  left_join(sub_design %>% rownames_to_column(var="row.names"),by = "row.names")\
+points$Compartments <- factor(points$Compartments,levels = c("B","R","Ro", "S","L"))\
+points$Treatment <- factor(points$Treatment,levels = c("CK","D1","D2","W","WD1","WD2"))\
+col <- c("#1F78B4", "#FB9A99", "#FDBF6F", "#E31A1C", "#33A02C")\
+ggplot(points, aes(x = x, y = y, color = Compartments, shape = Treatment)) +\
+  scale_shape_manual(values = c(1,2,0,16,17,15))+\
+  geom_point(size = 3) +\
+  labs(x = paste("PCoA 1 (", format(100 * pcoa$eig[1] / sum(pcoa$eig), digits = 4), "%)", sep = ""),\
+       y = paste("PCoA 2 (", format(100 * pcoa$eig[2] / sum(pcoa$eig), digits = 4), "%)", sep = "")) +\
+  scale_colour_manual(values = col) +\
+  theme_set(theme_classic()) +\
+  theme(axis.text.x = element_text(size = 8,color="black"),\
+        axis.text.y = element_text(size = 8,color="black"),\
+        axis.title.y = element_text(size = 12,color="black"),\
+        axis.title.x = element_text(size = 12,color="black"),\
+        legend.title = element_text(size = 8,color="black"),\
+        legend.text = element_text(size = 8,color="black"))\
+\
+#PERMANOVA\
+library(vegan)\
+ado <- adonis2(otu ~ Warming+Drought+Compartments, sub_design, permutations = 999, by="margin")\
+ado\
+#Community composition\
+library(tidyverse)\
+library(scatterpie)\
+df1 <- read.table("Phylum.txt",header = T,row.names = 1,sep = "\\t",stringsAsFactors = F)\
+df2a <- data.frame()\
+for (compartmentsi in unique(df1$compartments)) \{\
+  tmp1=df1 %>% filter(compartments == compartmentsi)\
+  df2a=rbind(df2a,c(compartments=compartmentsi,treatment="alltreatment",colSums(tmp1[,3:11])))\
+\}\
+df2b <- data.frame()\
+for (treatmenti in unique(df1$treatment)) \{\
+  tmp2=df1 %>% filter(treatment == treatmenti)\
+  df2b=rbind(df2b,c(compartments="allcompartments",treatment=treatmenti,colSums(tmp2[,3:11])))\
+\}\
+df2c <- data.frame()\
+df2c <- c(compartments="allcompartments",treatment="alltreatment", colSums(df1[,3:11]))\
+colnames(df2a) <- colnames(df1)\
+colnames(df2b) <- colnames(df1)\
+df2 <- rbind(df2a,df2b) %>% rbind(df2c)\
+df2$Ascomycota <- as.numeric(df2$Ascomycota)\
+df2$Basidiomycota <- as.numeric(df2$Basidiomycota)\
+df2$Chytridiomycota <- as.numeric(df2$Chytridiomycota)\
+df2$Glomeromycota <- as.numeric(df2$Glomeromycota)\
+df2$Mortierellomycota <- as.numeric(df2$Mortierellomycota)\
+df2$Mucoromycota <- as.numeric(df2$Mucoromycota)\
+df2$Rozellomycota <- as.numeric(df2$Rozellomycota)\
+df2$Unassigned <- as.numeric(df2$Unassigned)\
+df2$Others <- as.numeric(df2$Others)\
+df3 <- df1 %>% rbind(df2)\
+df3$treatment <- ifelse(df3$treatment=="CK",1,\
+                     ifelse(df3$treatment=="D1",2,\
+                            ifelse(df3$treatment=="D2",3,\
+                                   ifelse(df3$treatment=="W",4,\
+                                          ifelse(df3$treatment=="WD1",5,\
+                                                 ifelse(df3$treatment=="WD2",6,7))))))\
+df3$compartments <- ifelse(df3$compartments=="L",-1,\
+                        ifelse(df3$compartments=="S",-2,\
+                               ifelse(df3$compartments=="Ro",-3,\
+                                      ifelse(df3$compartments=="R",-4,\
+                                             ifelse(df3$compartments=="B",-5,-6)))))\
+library(RColorBrewer)\
+color_ce <- brewer.pal(9, "Set1")[c(1,2,3,4,5,6,7,8,9)]\
+names(color_ce) <- c("Ascomycota","Basidiomycota","Chytridiomycota","Glomeromycota","Mortierellomycota","Mucoromycota", "Rozellomycota","Unassigned","Others")\
+df3$radius <- log2(rowSums(df3[,3:11])) / 64\
+ggplot() + geom_scatterpie(aes(x=treatment, y=compartments, r=radius), data=df3,cols=colnames(df3)[3:11],color=NA)+ \
+  geom_hline(yintercept = -5.5,linetype=5)+\
+  geom_vline(xintercept = 6.5,linetype=5)+\
+  geom_scatterpie_legend(df3$radius, x=3.5, y=-1.3,n=4,labeller = function(x) round(2^(x*64)))+\
+  coord_equal()+\
+  scale_fill_manual(values = color_ce)+\
+  scale_x_continuous("",expand = c(0,0),breaks = 1:7,labels = c("CK","D1","D2","W","WD1","WD2","alltreatment"))+\
+  scale_y_continuous("",expand = c(0,0),breaks = -6:-1,labels = c("allcompartments","B","R","Ro","S","L"))+\
+  theme_bw()+\
+  theme(\
+    panel.grid = element_blank(),\
+    legend.title = element_blank()\
+  )\
+\
+#Total fungal absolute abundance from bulk soil to leaf\
+library(ggplot2)\
+library(reshape2)\
+library(ggpmisc)\
+df <- read.table(file="Abundance.txt",sep="\\t",header=T,check.names=FALSE, row.names = 1)\
+df$Sample <- rownames(df)\
+data2 <- melt(df, id.vars = c("Sample", "Compartment"), \
+              measure.vars = c('CK','D1','D2', 'W','WD1','WD2'))\
+data2$Compartment <- factor(data2$Compartment, levels = c("compartment1", "compartment2", "compartment3", "compartment4", "compartment5"))\
+data2$variable <- factor(data2$variable, levels = c('CK','D1','D2', 'W','WD1','WD2'))\
+data2$x <- rep(c(1:5, 7:11, 13:17, 19:23, 25:29, 31:35), each = 5)\
+df2 <- melt(df, id.vars = c("Sample", "Compartment"), \
+            measure.vars = c('CK','D1','D2', 'W','WD1','WD2'))\
+df2$Compartment <- factor(df2$Compartment, levels = c("compartment1", "compartment2", "compartment3", "compartment4", "compartment5"))\
+df2$variable <- factor(df2$variable, levels = c('CK','D1','D2', 'W','WD1','WD2'))\
+CK_results_matrix <- matrix(NA, nrow = 5, ncol = 5)\
+rownames(CK_results_matrix) <- colnames(CK_results_matrix) <- paste0("compartment", 1:5)\
+for (i in 1:5) \{\
+  for (j in 1:5) \{\
+    if (i == j) \{\
+      next\
+    \} else \{\
+      x <- subset(df2, variable == "CK" & Compartment == paste0("compartment", i))$value\
+      y <- subset(df2, variable == "CK" & Compartment == paste0("compartment", j))$value\
+      result <- wilcox.test(x, y,exact = FALSE)\
+      p_value <- result$p.value\
+      CK_results_matrix[i, j] <- p_value\
+    \}\
+  \}\
+\}\
+CK_results_matrix <- as.data.frame(CK_results_matrix)\
+D1_results_matrix <- matrix(NA, nrow = 5, ncol = 5)\
+rownames(D1_results_matrix) <- colnames(D1_results_matrix) <- paste0("compartment", 1:5)\
+for (i in 1:5) \{\
+  for (j in 1:5) \{\
+    if (i == j) \{\
+      next\
+    \} else \{\
+      x <- subset(df2, variable == "D1" & Compartment == paste0("compartment", i))$value\
+      y <- subset(df2, variable == "D1" & Compartment == paste0("compartment", j))$value\
+      result <- wilcox.test(x, y,exact = FALSE)\
+      p_value <- result$p.value\
+      D1_results_matrix[i, j] <- p_value\
+    \}\
+  \}\
+\}\
+D1_results_matrix <- as.data.frame(D1_results_matrix)\
+D2_results_matrix <- matrix(NA, nrow = 5, ncol = 5)\
+rownames(D2_results_matrix) <- colnames(D2_results_matrix) <- paste0("compartment", 1:5)\
+for (i in 1:5) \{\
+  for (j in 1:5) \{\
+    if (i == j) \{\
+      next\
+    \} else \{\
+      x <- subset(df2, variable == "D2" & Compartment == paste0("compartment", i))$value\
+      y <- subset(df2, variable == "D2" & Compartment == paste0("compartment", j))$value\
+      result <- wilcox.test(x, y,exact = FALSE)\
+      p_value <- result$p.value\
+      D2_results_matrix[i, j] <- p_value\
+    \}\
+  \}\
+\}\
+D2_results_matrix <- as.data.frame(D2_results_matrix)\
+W_results_matrix <- matrix(NA, nrow = 5, ncol = 5)\
+rownames(W_results_matrix) <- colnames(W_results_matrix) <- paste0("compartment", 1:5)\
+for (i in 1:5) \{\
+  for (j in 1:5) \{\
+    if (i == j) \{\
+      next\
+    \} else \{\
+      x <- subset(df2, variable == "W" & Compartment == paste0("compartment", i))$value\
+      y <- subset(df2, variable == "W" & Compartment == paste0("compartment", j))$value\
+      result <- wilcox.test(x, y,exact = FALSE)\
+      p_value <- result$p.value\
+      W_results_matrix[i, j] <- p_value\
+    \}\
+  \}\
+\}\
+W_results_matrix <- as.data.frame(W_results_matrix)\
+WD1_results_matrix <- matrix(NA, nrow = 5, ncol = 5)\
+rownames(WD1_results_matrix) <- colnames(WD1_results_matrix) <- paste0("compartment", 1:5)\
+for (i in 1:5) \{\
+  for (j in 1:5) \{\
+    if (i == j) \{\
+      next\
+    \} else \{\
+      x <- subset(df2, variable == "WD1" & Compartment == paste0("compartment", i))$value\
+      y <- subset(df2, variable == "WD1" & Compartment == paste0("compartment", j))$value\
+      result <- wilcox.test(x, y,exact = FALSE)\
+      p_value <- result$p.value\
+      WD1_results_matrix[i, j] <- p_value\
+    \}\
+  \}\
+\}\
+WD1_results_matrix <- as.data.frame(WD1_results_matrix)\
+WD2_results_matrix <- matrix(NA, nrow = 5, ncol = 5)\
+rownames(WD2_results_matrix) <- colnames(WD2_results_matrix) <- paste0("compartment", 1:5)\
+for (i in 1:5) \{\
+  for (j in 1:5) \{\
+    if (i == j) \{\
+      next\
+    \} else \{\
+      x <- subset(df2, variable == "WD2" & Compartment == paste0("compartment", i))$value\
+      y <- subset(df2, variable == "WD2" & Compartment == paste0("compartment", j))$value\
+      result <- wilcox.test(x, y,exact = FALSE)\
+      p_value <- result$p.value\
+      WD2_results_matrix[i, j] <- p_value\
+    \}\
+  \}\
+\}\
+WD2_results_matrix <- as.data.frame(WD2_results_matrix)\
+library(ggplot2)\
+ggplot()+\
+  geom_boxplot(data=data2[data2$variable=="CK",],\
+               aes(x, value, fill = Compartment), outlier.color = NA)+\
+  geom_boxplot(data=data2[data2$variable=="D1",],\
+               aes(x, value, fill = Compartment), outlier.color = NA)+\
+  geom_boxplot(data=data2[data2$variable=="D2",],\
+               aes(x, value, fill = Compartment), outlier.color = NA)+\
+  geom_boxplot(data=data2[data2$variable=="W",],\
+               aes(x, value, fill = Compartment), outlier.color = NA)+\
+  geom_boxplot(data=data2[data2$variable=="WD1",],\
+               aes(x, value, fill = Compartment), outlier.color = NA)+\
+  geom_boxplot(data=data2[data2$variable=="WD2",],\
+               aes(x, value, fill = Compartment), outlier.color = NA)+\
+  geom_jitter(data=data2[data2$variable=="CK",],\
+              aes(x, value, fill = Compartment), \
+              color = "grey30", size = 1.5, width = 0.3, shape = 21)+\
+  geom_jitter(data=data2[data2$variable=="D1",],\
+              aes(x, value, fill = Compartment), \
+              color = "grey30", size = 1.5, width = 0.3, shape = 21)+\
+  geom_jitter(data=data2[data2$variable=="D2",],\
+              aes(x, value, fill = Compartment), \
+              color = "grey30", size = 1.5, width = 0.3, shape = 21)+\
+  geom_jitter(data=data2[data2$variable=="W",],\
+              aes(x, value, fill = Compartment), \
+              color = "grey30", size = 1.5, width = 0.3, shape = 21)+\
+  geom_jitter(data=data2[data2$variable=="WD1",],\
+              aes(x, value, fill = Compartment), \
+              color = "grey30", size = 1.5, width = 0.3, shape = 21)+\
+  geom_jitter(data=data2[data2$variable=="WD2",],\
+              aes(x, value, fill = Compartment), \
+              color = "grey30", size = 1.5, width = 0.3, shape = 21)+\
+  geom_smooth(data=data2[data2$variable=="CK",],\
+              aes(x, value),method = "lm", se=F,\
+              formula = y ~ x,linewidth = 0.8,\
+              linetype=1)+\
+  geom_smooth(data=data2[data2$variable=="D1",],\
+              aes(x, value),method = "lm", se=F,\
+              formula = y ~ x, linewidth = 0.8,\
+              linetype=1)+\
+  geom_smooth(data=data2[data2$variable=="D2",],\
+              aes(x, value),method = "lm", se=F,\
+              formula = y ~ x,linewidth = 0.8,\
+              linetype=1)+\
+  geom_smooth(data=data2[data2$variable=="W",],\
+              aes(x, value),method = "lm", se=F,\
+              formula = y ~ x,linewidth = 0.8,\
+              linetype=1)+\
+  geom_smooth(data=data2[data2$variable=="WD1",],\
+              aes(x, value),method = "lm", se=F,\
+              formula = y ~ x,linewidth = 0.8,\
+              linetype=1)+\
+  geom_smooth(data=data2[data2$variable=="WD2",],\
+              aes(x, value),method = "lm", se=F,\
+              formula = y ~ x,linewidth = 0.8,\
+              linetype=1)+\
+  stat_poly_eq(data=data2[data2$variable=="CK",],\
+               aes(x, value, label = after_stat(p.value.label)),\
+               formula = y ~ x,\
+               parse = TRUE,label.x = 0.1, label.y = 0.1,size=4,\
+               color = "black")+\
+  stat_poly_eq(data=data2[data2$variable=="D1",],\
+               aes(x, value, label = after_stat(p.value.label)),\
+               formula = y ~ x,\
+               parse = TRUE,label.x = 0.35, label.y = 0.1,size=4,\
+               color = "black")+\
+  stat_poly_eq(data=data2[data2$variable=="D2",],\
+               aes(x, value, label = after_stat(p.value.label)),\
+               formula = y ~ x,\
+               parse = TRUE,label.x = 0.65, label.y = 0.1,size=4,\
+               color = "black")+\
+  stat_poly_eq(data=data2[data2$variable=="W",],\
+               aes(x, value, label = after_stat(p.value.label)),\
+               formula = y ~ x,\
+               parse = TRUE,label.x = 0.9, label.y = 0.1,size=4,\
+               color = "black")+\
+  stat_poly_eq(data=data2[data2$variable=="WD1",],\
+               aes(x, value, label = after_stat(p.value.label)),\
+               formula = y ~ x,\
+               parse = TRUE,label.x = 1.2, label.y = 0.1,size=4,\
+               color = "black")+\
+  stat_poly_eq(data=data2[data2$variable=="WD2",],\
+               aes(x, value, label = after_stat(p.value.label)),\
+               formula = y ~ x,\
+               parse = TRUE,label.x = 1.45, label.y = 0.1,size=4,\
+               color = "black")+\
+scale_x_continuous(breaks = c(3,9,15,21,27,33),\
+                   labels = c('CK','D1','D2', 'W','WD1','WD2'))+\
+  scale_y_continuous(limits = c(0, 100000000))+\
+  labs(x=NULL,y="Abundance")+\
+  geom_vline(xintercept = 6, linetype = 2, color = "black",linewidth=0.8)+\
+  geom_vline(xintercept = 12, linetype = 2, color = "black",linewidth=0.8)+\
+  geom_vline(xintercept = 18, linetype = 2, color = "black",linewidth=0.8)+\
+  geom_vline(xintercept = 24, linetype = 2, color = "black",linewidth=0.8)+\
+  geom_vline(xintercept = 30, linetype = 2, color = "black",linewidth=0.8)+\
+  theme_bw()+\
+  theme(panel.grid = element_blank(),\
+        axis.text.x = element_text(angle = 0, vjust = 1, hjust = 1, size = 12),\
+        axis.text.y = element_text(size = 12),\
+        axis.title = element_text(size = 14),\
+        legend.position = c(0.95,0.8),\
+        legend.background = element_blank())+\
+  scale_fill_manual(values = c("#1F78B4", "#FB9A99", "#FDBF6F", "#E31A1C", "#33A02C"))\
+\
+#Two-way ANOVA analysis\
+library(ggpubr)\
+library(rstatix)\
+soil <- read.table(file="~/Desktop/MH_Sample_abundance_B.txt", sep = '\\t', header = TRUE)\
+soil$warming <- factor(soil$warming)\
+soil$drought <- factor(soil$drought)\
+model  <- lm(abundance ~ warming*drought, data = soil)\
+ggqqplot(residuals(model))\
+shapiro.test(model$residuals)\
+summary(model)\
+Anova(model)\
+#Scheirer-Ray-Hare test\
+library(rcompanion)\
+scheirerRayHare(abundance~warming*drought, data = soil)\
+\
+#Heatmap\
+library(pheatmap)\
+data <- read.table("Plant_pathogens.txt", header = T, sep = "\\t", row.names = 1)\
+group <- read.table("Group.txt", header = T, sep = "\\t", row.names = 1, stringsAsFactors = T)\
+pheatmap(data)\
+color <- colorRampPalette(c("white", "firebrick3"))(50)\
+ann_colors = list(\
+  Drought = c(No_drought = "#E6E6E6",  Moderate_drought = "#969696", Severe_drought = "#5a5a5a"),\
+  Warming    = c(No_warming = "#228833", Warming = "#ee6677")\
+)\
+p1<-pheatmap(log(data+1),\
+             color = color,\
+             cluster_rows = FALSE,\
+             cluster_col = FALSE,  \
+             show_colnames = FALSE,\
+             annotation_col = group,\
+             annotation_colors = ann_colors,\
+             fontsize_row = 10\
+)\
+p1\
+}
